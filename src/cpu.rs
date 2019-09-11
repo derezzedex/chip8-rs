@@ -125,17 +125,92 @@ impl Chip8{
     ///------------------
     ///1010001011110000   // 0xA2F0
     ///```
-    pub fn fetch_opcode(&mut self) -> u16{
+    pub fn decode_opcode(&mut self) -> u16{
         let pc = self.pc as usize;
         (self.memory[pc] as u16) << 8 | (self.memory[pc + 1] as u16)
     }
 
+    /// When executing a opcode, there are common parts used to store the metadata
+    /// like the register that'll be used or the bytes to be added, so we
+    /// separate the opcode in parts, they being:
+    ///```
+    /// nnn or addr - A 12-bit value, the lowest 12 bits of the instruction
+    /// n or nibble - A 4-bit value, the lowest 4 bits of the instruction
+    /// x - A 4-bit value, the lower 4 bits of the high byte of the instruction
+    /// y - A 4-bit value, the upper 4 bits of the low byte of the instruction
+    /// kk or byte - An 8-bit value, the lowest 8 bits of the instruction
+    ///```
+    pub fn execute_opcode(&mut self){
+
+        let nnn = (self.opcode & 0xFFF0) >> 4;
+        let n =   (self.opcode & 0x000F) as u8;
+        let x =   (self.opcode & 0x0F00) >> 8;
+        let y =   (self.opcode & 0x00F0) >> 4;
+        let kk =  (self.opcode & 0x00FF) as u8;
+
+        match self.opcode{
+            0x3000..=0x3FFF => { // [SE Vx, byte] Skip next instruction if Vx = kk.
+                if self.v[x as usize] == kk { self.pc += 2 }
+            },
+            0x4000..=0x4FFF =>{ // [SNE Vx, byte] Skip next instruction if Vx != kk.
+                if self.v[x as usize] != kk { self.pc += 2 }
+            },
+            0x5000..=0x5FFF =>{ // [SE Vx, Vy] Skip next instruction if Vx = Vy.
+                if self.v[x as usize] == self.v[y as usize] { self.pc += 2 }
+            },
+            0x6000..=0x6FFF =>{ // [LD Vx, byte] Set Vx = kk.
+                self.v[x as usize] = kk;
+            },
+            0x7000..=0x7FFF =>{ // [ADD Vx, byte] Set Vx = Vx + kk.
+                self.v[x as usize] += kk;
+            },
+            0x8000..=0x8FF0 =>{ // [LD Vx, Vy] Set Vx = Vy.
+                self.v[x as usize] = self.v[y as usize];
+            },
+            0x8000..=0x8FF1 =>{ // [OR Vx, Vy] Set Vx = Vx OR Vy.
+                self.v[x as usize] = self.v[x as usize] | self.v[y as usize];
+            },
+            0x8000..=0x8FF2 =>{ // [AND Vx, Vy]
+                self.v[x as usize] = self.v[x as usize] & self.v[y as usize];
+            },
+            0x8000..=0x8FF3 =>{ // [OR Vx, Vy]
+                self.v[x as usize] = self.v[x as usize] ^ self.v[y as usize];
+            },
+            0x8000..=0x8FF4 =>{ // [OR Vx, Vy]
+                let mut value = self.v[x as usize] as u16 + self.v[y as usize] as u16;
+                if value > 255 {
+                    value = 255;
+                    self.v[0xF] = 1; // set the carry
+                }else{
+                    self.v[0xF] = 0;
+                }
+
+                self.v[x as usize] = value as u8;
+            },
+            0x8000..=0x8FF5 =>{ // [OR Vx, Vy]
+                if self.v[x as usize] > self.v[y as usize] { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
+                self.v[x as usize] -= self.v[y as usize];
+            },
+            0x8000..=0x8FF6 =>{ // [OR Vx, Vy]
+                if n == 0x1 { self.v[0xF] = 1 } else { self.v[0xF] = 0}
+                self.v[x as usize] /= 2;
+            },
+            0x8000..=0x8FF7 =>{ // [OR Vx, Vy]
+                if self.v[y as usize] > self.v[x as usize] { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
+                self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+            },
+            0x8000..=0x8FFE =>{ // [OR Vx, Vy]
+                let most = (self.v[x as usize] & 0xF0) >> 4;
+                if most == 1 { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
+                self.v[x as usize] *= 2;
+            },
+            _ => println!("Unknown opcode: {:x?}", self.opcode),
+        }
+    }
+
     pub fn emulate_cycle(&mut self){
-        self.fetch_opcode();
-
-        // decode code
-        // execute code
-
+        self.opcode = self.decode_opcode();
+        self.execute_opcode();
         //update timers
     }
 }
