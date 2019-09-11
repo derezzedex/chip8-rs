@@ -1,6 +1,10 @@
+#[macro_use]
+extern crate glium;
+
 use std::fs::File;
 use std::io::Read;
 
+mod graphics;
 mod cpu;
 
 fn main() {
