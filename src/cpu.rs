@@ -1,3 +1,5 @@
+use rand::Rng;
+
 const SCREEN_WIDTH: u16 = 64;
 const SCREEN_HEIGHT: u16 = 32;
 const SCREEN_SIZE: u16 = SCREEN_WIDTH * SCREEN_HEIGHT;
@@ -5,6 +7,7 @@ const SCREEN_SIZE: u16 = SCREEN_WIDTH * SCREEN_HEIGHT;
 const MEMORY_SIZE: u16 = 4096;
 
 const FONT_NUMBER: usize = 80;
+/// Each font number is 5 bytes long.
 const FONTSET: [u8; FONT_NUMBER] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -170,13 +173,13 @@ impl Chip8{
             0x8000..=0x8FF1 =>{ // [OR Vx, Vy] Set Vx = Vx OR Vy.
                 self.v[x as usize] = self.v[x as usize] | self.v[y as usize];
             },
-            0x8000..=0x8FF2 =>{ // [AND Vx, Vy]
+            0x8000..=0x8FF2 =>{ // [AND Vx, Vy] Set Vx = Vx AND Vy.
                 self.v[x as usize] = self.v[x as usize] & self.v[y as usize];
             },
-            0x8000..=0x8FF3 =>{ // [OR Vx, Vy]
+            0x8000..=0x8FF3 =>{ // [XOR Vx, Vy] Set Vx = Vx XOR Vy.
                 self.v[x as usize] = self.v[x as usize] ^ self.v[y as usize];
             },
-            0x8000..=0x8FF4 =>{ // [OR Vx, Vy]
+            0x8000..=0x8FF4 =>{ // [ADD Vx, Vy] Set Vx = Vx + Vy, set VF = carry.
                 let mut value = self.v[x as usize] as u16 + self.v[y as usize] as u16;
                 if value > 255 {
                     value = 255;
@@ -187,22 +190,68 @@ impl Chip8{
 
                 self.v[x as usize] = value as u8;
             },
-            0x8000..=0x8FF5 =>{ // [OR Vx, Vy]
+            0x8000..=0x8FF5 =>{ // [SUB Vx, Vy] Set Vx = Vx - Vy, set VF = NOT borrow.
                 if self.v[x as usize] > self.v[y as usize] { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
                 self.v[x as usize] -= self.v[y as usize];
             },
-            0x8000..=0x8FF6 =>{ // [OR Vx, Vy]
+            0x8000..=0x8FF6 =>{ // [SHR Vx {, Vy}] Set Vx = Vx SHR 1.
                 if n == 0x1 { self.v[0xF] = 1 } else { self.v[0xF] = 0}
                 self.v[x as usize] /= 2;
             },
-            0x8000..=0x8FF7 =>{ // [OR Vx, Vy]
+            0x8000..=0x8FF7 =>{ // [SUBN Vx, Vy] Set Vx = Vy - Vx, set VF = NOT borrow.
                 if self.v[y as usize] > self.v[x as usize] { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
                 self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
             },
-            0x8000..=0x8FFE =>{ // [OR Vx, Vy]
+            0x8000..=0x8FFE =>{ // [SHL Vx {, Vy}] Set Vx = Vx SHL 1.
                 let most = (self.v[x as usize] & 0xF0) >> 4;
                 if most == 1 { self.v[0xF] = 1 } else { self.v[0xF] = 0 }
                 self.v[x as usize] *= 2;
+            },
+            0x9000..=0x9FF0 =>{ // [SNE Vx, Vy] Skip next instruction if Vx != Vy.
+                if self.v[x as usize] != self.v[y as usize] { self.pc += 2 }
+            },
+            0xA000..=0xAFFF =>{ // [LD I, addr] Set I = nnn.
+                self.i = nnn;
+            },
+            0xB000..=0xBFFF =>{ // [JP V0, addr] Jump to location nnn + V0.
+                self.pc = nnn + self.v[0x0] as u16;
+            },
+            0xC000..=0xCFFF =>{ // [RND Vx, byte] Set Vx = random byte AND kk.
+                let random = rand::thread_rng().gen::<u8>();
+                self.v[x as usize] = kk & random;
+            },
+            0xD000..=0xDFFF => panic!("Drawing not implemented!"),
+            0xE09E..=0xEF9E =>{ // [SKP Vx] Skip next instruction if key with the value of Vx is pressed.
+                let input = 0u8; // TODO: Fetch keydown
+                if input == self.v[x as usize] { self.pc += 2 }
+            },
+            0xE0A1..=0xEFA1 =>{
+                let input = 0u8; // TODO: Fetch keydown
+                if input != self.v[x as usize] { self.pc += 2 }
+            },
+            0xF007..=0xFF07 =>{ // []
+                self.v[x as usize] = self.delay_timer;
+            },
+            0xF00A..=0xFF0A =>{ // []
+                let input = 0u8; // TODO: wait for key press
+                self.v[x as usize] = input;
+            },
+            0xF015..=0xFF15 =>{ // []
+                self.delay_timer = self.v[x as usize];
+            },
+            0xF018..=0xFF18 =>{ // []
+                self.sound_timer = self.v[x as usize];
+            },
+            0xF01E..=0xFF1E =>{ // []
+                self.i += self.v[x as usize] as u16;
+            },
+            0xF029..=0xFF29 =>{ // []
+                self.i = (self.v[x as usize] as u16) * 5; //sprites are 5-byte long
+            },
+            0xF033..=0xFF33 =>{ // []
+
+            },
+            0xC000..=0xCFFF =>{ // []
             },
             _ => println!("Unknown opcode: {:x?}", self.opcode),
         }
