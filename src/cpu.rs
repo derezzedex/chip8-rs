@@ -152,6 +152,23 @@ impl Chip8{
         let kk =  (self.opcode & 0x00FF) as u8;
 
         match self.opcode{
+            0x00E0 =>{
+                self.display = [0; SCREEN_SIZE];
+            },
+            0x00EE =>{ // []
+                self.stack -= 1;
+                self.pc = self.stack[self.sp];
+            },
+            0x1000..=0x1FFF =>{ // []
+                self.pc = nnn;
+                self.pc -= 2;
+            },
+            0x2000..=0x2FFF =>{ // []
+                self.stack[self.sp] = self.pc;
+                self.stack += 1;
+                self.pc = nnn;
+                self.pc -= 2;
+            },
             0x3000..=0x3FFF => { // [SE Vx, byte] Skip next instruction if Vx = kk.
                 if self.v[x as usize] == kk { self.pc += 2 }
             },
@@ -249,12 +266,24 @@ impl Chip8{
                 self.i = (self.v[x as usize] as u16) * 5; //sprites are 5-byte long
             },
             0xF033..=0xFF33 =>{ // []
-
+                self.memory[self.i + 0] = self.v[x as usize] / 100;
+                self.memory[self.i + 1] =(self.v[x as usize] / 10) % 10;
+                self.memory[self.i + 2] = self.v[x as usize] % 10;
             },
-            0xC000..=0xCFFF =>{ // []
+            0xF055..=0xFF55 =>{ // []
+                for i in 0..0xF{
+                    self.memory[self.i + i] = self.v[i];
+                }
+            },
+            0xF065..=0xFF65 =>{ // []
+                for i in 0..0xF{
+                    self.v[i] = self.memory[self.i + i];
+                }
             },
             _ => println!("Unknown opcode: {:x?}", self.opcode),
         }
+
+        self.pc += 2;
     }
 
     pub fn emulate_cycle(&mut self){
