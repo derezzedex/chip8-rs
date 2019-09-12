@@ -1,23 +1,43 @@
+use glium::backend::Facade;
 use glium::glutin;
 use glium::Surface;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
-    position: [f32; 3]
+    position: [f32; 2],
+    tex_coords: [f32; 2],
 }
 
-impl Vertex{
-    pub fn new(position: [f32; 3]) -> Self{
-        Self{
-            position
-        }
-    }
-}
+implement_vertex!(Vertex, position, tex_coords);
 
-implement_vertex!(Vertex, position);
+// const FRAMEBUFFER_WIDTH:  u32 = 64;
+// const FRAMEBUFFER_HEIGHT: u32 = 32;
+// const PIXEL_SIZE: u32 = 20;
 
-const PIXEL_SIZE: u32 = 20;
+pub type Color = (u8, u8, u8);
 
+const FRAMEBUFFER_VERTICES: [Vertex; 4] = [
+    Vertex {
+        position: [-1.0, -1.0],
+        tex_coords: [0.0, 0.0],
+    },
+    Vertex {
+        position: [-1.0, 1.0],
+        tex_coords: [0.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, 1.0],
+        tex_coords: [1.0, 1.0],
+    },
+    Vertex {
+        position: [1.0, -1.0],
+        tex_coords: [1.0, 0.0],
+    },
+];
+const FRAMEBUFFER_INDICES: [u32; 4] = [1, 2, 0, 3];
+
+pub type Texture = glium::texture::Texture2d;
+pub type FrameBuffer<'a> = glium::framebuffer::SimpleFrameBuffer<'a>;
 pub struct Renderer {
     display: glium::Display,
     events_loop: glutin::EventsLoop,
@@ -30,9 +50,8 @@ impl Renderer {
         let events_loop = glutin::EventsLoop::new();
         let wb = glutin::WindowBuilder::new()
             .with_title("CHIP-8 Emulator")
-            .with_dimensions((64 * PIXEL_SIZE, 32 * PIXEL_SIZE).into());
+            .with_dimensions((1024, 768).into());
         let cb = glutin::ContextBuilder::new()
-            .with_depth_buffer(24)
             .with_multisampling(4)
             .with_vsync(true);
         let display =
@@ -41,19 +60,24 @@ impl Renderer {
 
         let vertex = "
             #version 140
-            in vec2 position;
+
+            attribute vec2 position;
+            attribute vec2 tex_coords;
+            varying vec2 v_tex_coords;
 
             void main() {
                 gl_Position = vec4(position, 0.0, 1.0);
-                vColor = color;
+                v_tex_coords = tex_coords;
             }
         ";
         let fragment = "
             #version 140
 
-            out vec4 f_color;
+            uniform sampler2D tex;
+
+            varying vec2 v_tex_coords;
             void main() {
-                f_color = vec4(1.0, 1.0, 1.0, 1.0);
+                gl_FragColor = texture2D(tex, v_tex_coords);
             }
         ";
 
@@ -75,8 +99,39 @@ impl Renderer {
             .clear_color(0.0, 0.0, 0.0, 1.0);
     }
 
-    pub fn draw_sprite(&mut self) {
+    pub fn draw_screen(&mut self, content: Vec<Vec<Color>>) {
+        let texture = Texture::new(&self.display, content).expect("Couldn't create empty texture!");
 
+        let vertex_buffer = glium::VertexBuffer::new(&self.display, &FRAMEBUFFER_VERTICES)
+            .expect("Coudln't create vertex buffer!");
+        let index_buffer = glium::index::IndexBuffer::new(
+            &self.display,
+            glium::index::PrimitiveType::TriangleStrip,
+            &FRAMEBUFFER_INDICES,
+        )
+        .expect("Coudln't create index buffer!");
+
+        let uniforms = uniform! {
+            tex: texture.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest),
+        };
+
+        self.frame
+            .as_mut()
+            .expect("No frame to draw!")
+            .draw(
+                &vertex_buffer,
+                &index_buffer,
+                &self.program,
+                &uniforms,
+                &Default::default(),
+            )
+            .expect("Couldn't draw to screen!");
+    }
+
+    pub fn poll_events(&mut self) -> Vec<glutin::Event> {
+        let mut events = Vec::new();
+        self.events_loop.poll_events(|event| events.push(event));
+        events
     }
 
     pub fn new_frame(&mut self) {

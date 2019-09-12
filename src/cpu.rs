@@ -48,6 +48,17 @@ pub struct Chip8 {
     sp: u8,          // stack pointer
 
     key: [u8; 16], // HEX based keypad (0x0-0xF)
+
+    // Implementation flags,
+    // draw_flag: makes sure the backend draws the current display array to the screen
+    pub draw_flag: bool,
+    // input_flag: don't execute anything until a button is pressed,
+    // and when pressed, store at the v[x]
+    pub input_flag: i8,
+    //key_down: -1 if no key is being pressed,
+    // otherwise, contains the key code
+    pub key_down: i8
+
 }
 
 impl Chip8 {
@@ -68,6 +79,10 @@ impl Chip8 {
             sp: 0,
 
             key: [0; 16],
+
+            draw_flag: false,
+            key_down: -1,
+            input_flag: -1
         }
     }
 
@@ -91,6 +106,21 @@ impl Chip8 {
         //reset timers
         self.delay_timer = 0;
         self.sound_timer = 0;
+
+        self.draw_flag = false;
+        self.input_flag = -1;
+    }
+
+    pub fn get_display(&self) -> &[u8; SCREEN_SIZE as usize]{
+        &self.display
+    }
+
+    pub fn set_register(&mut self, register: u8, value: u8){
+        self.v[register as usize] = value;
+    }
+
+    pub fn set_keydown(&mut self, key: u8){
+        self.key_down = key as i8;
     }
 
     pub fn load_program(&mut self, buffer: Vec<u8>) {
@@ -101,7 +131,8 @@ impl Chip8 {
         }
 
         for i in 0..program_size {
-            self.memory[i + 512] = buffer[i];
+            // println!("Memory[{}] = {:x}", i + 0x200, buffer[i]);
+            self.memory[i + 0x200] = buffer[i];
         }
     }
 
@@ -129,6 +160,7 @@ impl Chip8 {
     ///1010001011110000   // 0xA2F0
     ///```
     pub fn decode_opcode(&mut self) -> u16 {
+        println!("PC: {} Memory: {:x}", self.pc, (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16);
         (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16
     }
 
@@ -143,11 +175,11 @@ impl Chip8 {
     /// kk or byte - An 8-bit value, the lowest 8 bits of the instruction
     ///```
     pub fn execute_opcode(&mut self) {
-        let nnn = (self.opcode & 0xFFF0) >> 4;
-        let n = (self.opcode & 0x000F) as u8;
-        let x = (self.opcode & 0x0F00) >> 8;
-        let y = (self.opcode & 0x00F0) >> 4;
-        let kk = (self.opcode & 0x00FF) as u8;
+        let nnn =   (self.opcode & 0x0FFF);
+        let n =     (self.opcode & 0x000F) as u8;
+        let x =     (self.opcode & 0x0F00) >> 8;
+        let y =     (self.opcode & 0x00F0) >> 4;
+        let kk =    (self.opcode & 0x00FF) as u8;
 
         match self.opcode {
             0x00E0 => {
@@ -280,7 +312,30 @@ impl Chip8 {
                 let random = rand::thread_rng().gen::<u8>();
                 self.v[x as usize] = kk & random;
             }
-            0xD000..=0xDFFF => panic!("Drawing not implemented!"),
+            0xD000..=0xDFFF => {
+                self.v[0xF] = 0;
+
+                println!("Sprite at ({},{}):", self.v[x as usize], self.v[y as usize]);
+                for h in 0..n{
+                    let row = self.memory[(self.i + h as u16) as usize];
+                    println!("{:08b}", row);
+                    for w in 0..8{
+                        let pixel = (row >> w) & 0b1;
+                        // let index = ((64 * self.v[x as usize]) + w + (32 * self.v[y as usize]) + h);
+                        let index = (self.v[x as usize] + w + ((self.v[y as usize] + h) * 64));
+                        let display_pixel = self.display[index as usize];
+                        let result_pixel = pixel ^ display_pixel;
+
+                        if self.v[0xF] == 0 && pixel == 1 && result_pixel == 0{
+                            self.v[0xF] = 1;
+                        }
+
+                        self.display[index as usize] = result_pixel;
+                    }
+                }
+
+                self.draw_flag = true;
+            },
             0xE09E..=0xEF9E => {
                 // [SKP Vx] Skip next instruction if key with the value of Vx is pressed.
                 let input = 0u8; // TODO: Fetch keydown
@@ -337,15 +392,14 @@ impl Chip8 {
                     self.v[i] = self.memory[self.i as usize + i];
                 }
             }
-            _ => println!("Unknown opcode: {:x?}", self.opcode),
+            _ => panic!("Unknown opcode: {:x?}", self.opcode),
         }
-
-        self.pc += 2;
     }
 
     pub fn emulate_cycle(&mut self) {
         self.opcode = self.decode_opcode();
         self.execute_opcode();
+        self.pc += 2;
         //update timers
     }
 }
