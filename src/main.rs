@@ -41,11 +41,6 @@ fn main() {
 
             let mut display: Vec<Vec<graphics::Color>> = vec![vec![(0, 0, 0); 64]; 32];
             for (n, pixel) in chip8.get_display().iter().enumerate(){
-                print!("{}", pixel);
-                if n%64 == 63{
-                    println!();
-                }
-
                 if *pixel != 0{
                     let i = n / 64;
                     let j = n % 64;

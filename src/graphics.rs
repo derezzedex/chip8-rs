@@ -1,4 +1,3 @@
-use glium::backend::Facade;
 use glium::glutin;
 use glium::Surface;
 
@@ -18,26 +17,25 @@ pub type Color = (u8, u8, u8);
 
 const FRAMEBUFFER_VERTICES: [Vertex; 4] = [
     Vertex {
-        position: [-1.0, -1.0],
-        tex_coords: [0.0, 0.0],
+        position:   [-1.0,  1.0 ],
+        tex_coords: [ 0.0,  0.0 ],
     },
     Vertex {
-        position: [-1.0, 1.0],
-        tex_coords: [0.0, 1.0],
+        position:   [-1.0, -1.0 ],
+        tex_coords: [ 0.0,  1.0 ],
     },
     Vertex {
-        position: [1.0, 1.0],
-        tex_coords: [1.0, 1.0],
+        position:   [ 1.0, -1.0 ],
+        tex_coords: [ 1.0,  1.0 ],
     },
     Vertex {
-        position: [1.0, -1.0],
-        tex_coords: [1.0, 0.0],
+        position:   [ 1.0,  1.0 ],
+        tex_coords: [ 1.0,  0.0 ],
     },
 ];
 const FRAMEBUFFER_INDICES: [u32; 4] = [1, 2, 0, 3];
 
 pub type Texture = glium::texture::Texture2d;
-pub type FrameBuffer<'a> = glium::framebuffer::SimpleFrameBuffer<'a>;
 pub struct Renderer {
     display: glium::Display,
     events_loop: glutin::EventsLoop,
