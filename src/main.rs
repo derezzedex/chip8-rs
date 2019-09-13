@@ -77,21 +77,15 @@ fn main() {
                     WindowEvent::CloseRequested => running = false,
                     WindowEvent::Resized(..) => chip8.draw_flag = true,
                     WindowEvent::KeyboardInput{ input, .. } => match input{
-                        KeyboardInput { scancode, state, ..} => {
-
-                            // let keydown = keyboard_to_keypad(scancode);
-                            // if keydown != -1 {
-                            //     if state == ElementState::Pressed{
-                            //         // if chip8 was waiting for a keydown, re-enable emulating
-                            //         if chip8.waiting_for_keydown(){
-                            //             chip8.set_key(0x10, 0);
-                            //         }
-                            //         chip8.set_key(keydown as u8, 1);
-                            //     }else{
-                            //         chip8.set_key(keydown as u8, 0);
-                            //     }
-                            // }
-
+                        KeyboardInput { scancode, state, ..} =>{
+                            let keydown = keyboard_to_keypad(scancode);
+                            if keydown != -1 {
+                                if state == ElementState::Pressed{
+                                    chip8.set_key(keydown as u8, 1);
+                                }else{
+                                    chip8.set_key(keydown as u8, 0);
+                                }
+                            }
                         }
                     },
                     _ => (),
@@ -100,27 +94,25 @@ fn main() {
             }
         }
 
-        if !chip8.waiting_for_keydown(){
-            chip8.emulate_cycle();
+        chip8.emulate_cycle();
 
-            // if chip8.draw_flag{
-                // println!("Drawing");
-                renderer.new_frame();
-                renderer.clear_screen();
+        if chip8.draw_flag{
+            // println!("Drawing");
+            renderer.new_frame();
+            renderer.clear_screen();
 
-                let mut display: Vec<Vec<graphics::Color>> = vec![vec![(0, 0, 0); 64]; 32];
-                for (n, pixel) in chip8.get_display().iter().enumerate(){
-                    if *pixel != 0{
-                        let i = n / 64;
-                        let j = n % 64;
-                        display[i][j] = (255, 255, 255);
-                    }
+            let mut display: Vec<Vec<graphics::Color>> = vec![vec![(0, 0, 0); 64]; 32];
+            for (n, pixel) in chip8.get_display().iter().enumerate(){
+                if *pixel != 0{
+                    let i = n / 64;
+                    let j = n % 64;
+                    display[i][j] = (255, 255, 255);
                 }
-                renderer.draw_screen(display);
-                renderer.finish_frame();
+            }
+            renderer.draw_screen(display);
+            renderer.finish_frame();
 
-                // chip8.draw_flag = false;
-            // }
+            chip8.draw_flag = false;
         }
     }
 }

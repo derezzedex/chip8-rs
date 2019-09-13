@@ -199,7 +199,7 @@ impl Chip8 {
             0x1000..=0x1FFF => {
                 // [JP addr] Jump to location nnn.
                 self.pc = nnn;
-                self.pc -= 2;
+                // self.pc -= 2;
             }
             0x2000..=0x2FFF => {
                 // [CALL addr] Call subroutine at nnn.
@@ -208,7 +208,7 @@ impl Chip8 {
                 self.sp += 1;
                 self.pc = nnn;
                 // println!("AFTER -> PC: {} SP: {} Stack: {:?}", self.pc, self.sp, self.stack);
-                self.pc -= 2;
+                // self.pc -= 2;
             }
             0x3000..=0x3FFF => {
                 // [SE Vx, byte] Skip next instruction if Vx = kk.
@@ -242,27 +242,26 @@ impl Chip8 {
             }
             0x8000..=0x8FF1 => {
                 // [OR Vx, Vy] Set Vx = Vx OR Vy.
-                self.v[x as usize] = self.v[x as usize] | self.v[y as usize];
+                self.v[x as usize] |= self.v[y as usize];
             }
             0x8000..=0x8FF2 => {
                 // [AND Vx, Vy] Set Vx = Vx AND Vy.
-                self.v[x as usize] = self.v[x as usize] & self.v[y as usize];
+                self.v[x as usize] &= self.v[y as usize];
             }
             0x8000..=0x8FF3 => {
                 // [XOR Vx, Vy] Set Vx = Vx XOR Vy.
-                self.v[x as usize] = self.v[x as usize] ^ self.v[y as usize];
+                self.v[x as usize] ^= self.v[y as usize];
             }
             0x8000..=0x8FF4 => {
                 // [ADD Vx, Vy] Set Vx = Vx + Vy, set VF = carry.
                 let mut value = self.v[x as usize] as u16 + self.v[y as usize] as u16;
                 if value > 0xFF {
-                    value = 0xFF;
                     self.v[0xF] = 1; // set the carry
                 } else {
                     self.v[0xF] = 0;
                 }
 
-                self.v[x as usize] = value as u8;
+                self.v[x as usize] = (value & 0xFF) as u8;
             }
             0x8000..=0x8FF5 => {
                 // [SUB Vx, Vy] Set Vx = Vx - Vy, set VF = NOT borrow.
@@ -275,12 +274,8 @@ impl Chip8 {
             }
             0x8000..=0x8FF6 => {
                 // [SHR Vx {, Vy}] Set Vx = Vx SHR 1.
-                if n == 0x1 {
-                    self.v[0xF] = 1
-                } else {
-                    self.v[0xF] = 0
-                }
-                self.v[x as usize] /= 2;
+                self.v[0xF] = (self.v[x as usize] & 0x1);
+                self.v[x as usize] >>= 1;
             }
             0x8000..=0x8FF7 => {
                 // [SUBN Vx, Vy] Set Vx = Vy - Vx, set VF = NOT borrow.
@@ -299,7 +294,7 @@ impl Chip8 {
                 } else {
                     self.v[0xF] = 0
                 }
-                self.v[x as usize] *= 2;
+                self.v[x as usize] <<= 1;
             }
             0x9000..=0x9FF0 => {
                 // [SNE Vx, Vy] Skip next instruction if Vx != Vy.
@@ -323,14 +318,14 @@ impl Chip8 {
             0xD000..=0xDFFF => {
                 self.v[0xF] = 0;
 
-                // println!("Sprite at ({},{}) with size ({:X}):", self.v[x as usize], self.v[y as usize], n);
+                let x_pos = self.v[x as usize] as u16 % SCREEN_WIDTH;
+                let y_pos = self.v[y as usize] as u16 % SCREEN_HEIGHT;
+
                 for h in 0..n {
                     let row = self.memory[(self.i + h as u16) as usize];
-                    // println!("0x{:X},", row);
-                    // println!("{:X}:{:08b}", row, row);
+
                     for w in 0..8 {
-                        let index = (self.v[y as usize] as u16 + h as u16) * 64
-                            + (self.v[x as usize] as u16 + w as u16);
+                        let index = (y_pos + h as u16) * 64 + (x_pos + w as u16);
                         if row & (0x80 >> w) != 0 {
                             if self.display[index as usize] == 1 {
                                 self.v[0xF] = 1;
@@ -339,16 +334,6 @@ impl Chip8 {
                         }
                     }
                 }
-
-                // println!("Display after DRW:");
-                // for i in 0..32{
-                //     for j in 0..64{
-                //         print!("{}", self.display[i*64 + j]);
-                //     }
-                //     println!();
-                // }
-                // println!();
-
                 self.draw_flag = true;
             }
             0xE09E..=0xEF9E => {
@@ -369,7 +354,17 @@ impl Chip8 {
             }
             0xF00A..=0xFF0A => {
                 // [LD Vx, K] Wait for a key press, store the value of the key in Vx.
-                self.key[0xF] = 1;
+                let mut got_key = false;
+                for i in 0..0xF{
+                    if self.key[i as usize] != 0{
+                        self.v[x as usize] = i;
+                        got_key = true;
+                        break;
+                    }
+                }
+                if !got_key{
+                    self.pc -= 2;
+                }
             }
             0xF015..=0xFF15 => {
                 // [LD DT, Vx] Set delay timer = Vx.
@@ -389,19 +384,19 @@ impl Chip8 {
             }
             0xF033..=0xFF33 => {
                 // [LD B, Vx] Store BCD representation of Vx in memory locations I, I+1, and I+2.
-                self.memory[self.i as usize + 0] = self.v[x as usize] / 100;
+                self.memory[self.i as usize + 0] =  self.v[x as usize] / 100;
                 self.memory[self.i as usize + 1] = (self.v[x as usize] / 10) % 10;
-                self.memory[self.i as usize + 2] = self.v[x as usize] % 10;
+                self.memory[self.i as usize + 2] =  self.v[x as usize] % 10;
             }
             0xF055..=0xFF55 => {
                 // [LD [I], Vx] Store registers V0 through Vx in memory starting at location I.
-                for i in 0..0xF {
+                for i in 0..self.v[x as usize] as usize{
                     self.memory[self.i as usize + i] = self.v[i];
                 }
             }
             0xF065..=0xFF65 => {
                 // [LD Vx, [I]] Read registers V0 through Vx from memory starting at location I.
-                for i in 0..0xF {
+                for i in 0..self.v[x as usize] as usize{
                     self.v[i] = self.memory[self.i as usize + i];
                 }
             }
@@ -411,8 +406,8 @@ impl Chip8 {
 
     pub fn emulate_cycle(&mut self) {
         self.opcode = self.decode_opcode();
-        self.execute_opcode();
         self.pc += 2;
+        self.execute_opcode();
 
         //update timers
         if self.delay_timer > 0 {
