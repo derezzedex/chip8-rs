@@ -79,18 +79,18 @@ fn main() {
                     WindowEvent::KeyboardInput{ input, .. } => match input{
                         KeyboardInput { scancode, state, ..} => {
 
-                            let keydown = keyboard_to_keypad(scancode);
-                            if keydown != -1 {
-                                if state == ElementState::Pressed{
-                                    // if chip8 was waiting for a keydown, re-enable emulating
-                                    if chip8.waiting_for_keydown(){
-                                        chip8.set_key(0x10, 0);
-                                    }
-                                    chip8.set_key(keydown as u8, 1);
-                                }else{
-                                    chip8.set_key(keydown as u8, 0);
-                                }
-                        }
+                            // let keydown = keyboard_to_keypad(scancode);
+                            // if keydown != -1 {
+                            //     if state == ElementState::Pressed{
+                            //         // if chip8 was waiting for a keydown, re-enable emulating
+                            //         if chip8.waiting_for_keydown(){
+                            //             chip8.set_key(0x10, 0);
+                            //         }
+                            //         chip8.set_key(keydown as u8, 1);
+                            //     }else{
+                            //         chip8.set_key(keydown as u8, 0);
+                            //     }
+                            // }
 
                         }
                     },
@@ -103,7 +103,8 @@ fn main() {
         if !chip8.waiting_for_keydown(){
             chip8.emulate_cycle();
 
-            if chip8.draw_flag{
+            // if chip8.draw_flag{
+                // println!("Drawing");
                 renderer.new_frame();
                 renderer.clear_screen();
 
@@ -118,8 +119,8 @@ fn main() {
                 renderer.draw_screen(display);
                 renderer.finish_frame();
 
-                chip8.draw_flag = false;
-            }
+                // chip8.draw_flag = false;
+            // }
         }
     }
 }
