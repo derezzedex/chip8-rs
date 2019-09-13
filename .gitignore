@@ -16,3 +16,8 @@ Cargo.lock
 
 /target
 #**/*.rs.bk
+
+# Don't upload local ROMS
+/roms/*
+# Upload the tests
+!roms/tests

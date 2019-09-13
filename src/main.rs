@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::Path;
 use std::io::Read;
 
-use glium::glutin::{Event, KeyboardInput, ElementState};
+use glium::glutin::{Event, KeyboardInput, ElementState, VirtualKeyCode};
 use glium::glutin::WindowEvent;
 
 mod graphics;
@@ -23,24 +23,24 @@ mod cpu;
 ///|A|0|B|F|                |Z|X|C|V|
 ///+-+-+-+-+                +-+-+-+-+
 ///```
-fn keyboard_to_keypad(scancode: u32) -> i8{
-    match scancode{
-        0x16 => 0x1,
-        0x1E => 0x2,
-        0x26 => 0x3,
-        0x25 => 0xC,
-        0x15 => 0x4,
-        0x1D => 0x5,
-        0x24 => 0x6,
-        0x2D => 0xD,
-        0x1C => 0x7,
-        0x1B => 0x8,
-        0x23 => 0x9,
-        0x2B => 0xE,
-        0x1A => 0xA,
-        0x22 => 0x0,
-        0x21 => 0xB,
-        0x2A => 0xF,
+fn keyboard_to_keypad(keycode: VirtualKeyCode) -> i8{
+    match keycode{
+        VirtualKeyCode::Key1 => 0x1,
+        VirtualKeyCode::Key2 => 0x2,
+        VirtualKeyCode::Key3 => 0x3,
+        VirtualKeyCode::Key4 => 0xC,
+        VirtualKeyCode::Q => 0x4,
+        VirtualKeyCode::W => 0x5,
+        VirtualKeyCode::E => 0x6,
+        VirtualKeyCode::R => 0xD,
+        VirtualKeyCode::A => 0x7,
+        VirtualKeyCode::S => 0x8,
+        VirtualKeyCode::D => 0x9,
+        VirtualKeyCode::F => 0xE,
+        VirtualKeyCode::Z => 0xA,
+        VirtualKeyCode::X => 0x0,
+        VirtualKeyCode::C => 0xB,
+        VirtualKeyCode::V => 0xF,
         _ => -1,
     }
 }
@@ -54,7 +54,7 @@ fn main() {
     let rom = if args.len() > 1{
         roms_path.join(&args[1])
     }else{
-        roms_path.join("programs/ibm.ch8")
+        roms_path.join("tests/test_opcode.ch8")
     };
 
     println!("Loading file {:?}", rom);
@@ -77,13 +77,15 @@ fn main() {
                     WindowEvent::CloseRequested => running = false,
                     WindowEvent::Resized(..) => chip8.draw_flag = true,
                     WindowEvent::KeyboardInput{ input, .. } => match input{
-                        KeyboardInput { scancode, state, ..} =>{
-                            let keydown = keyboard_to_keypad(scancode);
-                            if keydown != -1 {
-                                if state == ElementState::Pressed{
-                                    chip8.set_key(keydown as u8, 1);
-                                }else{
-                                    chip8.set_key(keydown as u8, 0);
+                        KeyboardInput { virtual_keycode, state, ..} =>{
+                            if let Some(keycode) = virtual_keycode{
+                                let keydown = keyboard_to_keypad(keycode);
+                                if keydown != -1 {
+                                    if state == ElementState::Pressed{
+                                        chip8.set_key(keydown as u8, 1);
+                                    }else{
+                                        chip8.set_key(keydown as u8, 0);
+                                    }
                                 }
                             }
                         }
