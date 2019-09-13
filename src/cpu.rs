@@ -47,18 +47,11 @@ pub struct Chip8 {
     stack: [u8; 16], // 16 levels of stack
     sp: u8,          // stack pointer
 
-    key: [u8; 16], // HEX based keypad (0x0-0xF)
+    key: [u8; 17], // HEX based keypad (0x0-0x0F) + [0x10] = `don't emulate cycles until a key is pressed!`
 
     // Implementation flags,
     // draw_flag: makes sure the backend draws the current display array to the screen
-    pub draw_flag: bool,
-    // input_flag: don't execute anything until a button is pressed,
-    // and when pressed, store at the v[x]
-    pub input_flag: i8,
-    //key_down: -1 if no key is being pressed,
-    // otherwise, contains the key code
-    pub key_down: i8
-
+    pub draw_flag: bool
 }
 
 impl Chip8 {
@@ -78,11 +71,9 @@ impl Chip8 {
             stack: [0; 16],
             sp: 0,
 
-            key: [0; 16],
+            key: [0; 17],
 
-            draw_flag: false,
-            key_down: -1,
-            input_flag: -1
+            draw_flag: false
         }
     }
 
@@ -95,6 +86,7 @@ impl Chip8 {
         self.sp = 0;
         self.display = [0; SCREEN_SIZE as usize];
         self.stack = [0; 16];
+        self.key = [0; 17];
         self.v = [0; 16];
         self.memory = [0; MEMORY_SIZE as usize];
 
@@ -108,7 +100,6 @@ impl Chip8 {
         self.sound_timer = 0;
 
         self.draw_flag = false;
-        self.input_flag = -1;
     }
 
     pub fn get_display(&self) -> &[u8; SCREEN_SIZE as usize]{
@@ -119,8 +110,12 @@ impl Chip8 {
         self.v[register as usize] = value;
     }
 
-    pub fn set_keydown(&mut self, key: u8){
-        self.key_down = key as i8;
+    pub fn waiting_for_keydown(&self) -> bool{
+        self.key[0x10] != 0
+    }
+
+    pub fn set_key(&mut self, key: u8, state: u8){
+        self.key[key as usize] = state;
     }
 
     pub fn load_program(&mut self, buffer: Vec<u8>) {
@@ -162,7 +157,7 @@ impl Chip8 {
     ///1010001011110000   // 0xA2F0
     ///```
     pub fn decode_opcode(&mut self) -> u16 {
-        println!("PC: {} Memory: {:x}", self.pc, (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16);
+        println!("PC: {} Memory: {:04X}", self.pc, (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16);
         (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16
     }
 
@@ -190,8 +185,8 @@ impl Chip8 {
             0x00EE => {
                 // [RET] Return from a subroutine.
                 self.pc = self.stack[self.sp as usize] as u16;
-                self.pc -= 2;
                 self.sp -= 1;
+                self.pc -= 2;
             }
             0x1000..=0x1FFF => {
                 // [JP addr] Jump to location nnn.
@@ -200,8 +195,8 @@ impl Chip8 {
             }
             0x2000..=0x2FFF => {
                 // [CALL addr] Call subroutine at nnn.
-                self.sp += 1;
                 self.stack[self.sp as usize] = self.pc as u8;
+                self.sp += 1;
                 self.pc = nnn;
                 self.pc -= 2;
             }
@@ -318,31 +313,22 @@ impl Chip8 {
             0xD000..=0xDFFF => {
                 self.v[0xF] = 0;
 
-                println!("Sprite at ({},{}) with size ({:X}):", self.v[x as usize], self.v[y as usize], n);
+                // println!("Sprite at ({},{}) with size ({:X}):", self.v[x as usize], self.v[y as usize], n);
                 for h in 0..n{
                     let row = self.memory[(self.i + h as u16) as usize];
-                    println!("0x{:X},", row);
+                    // println!("0x{:X},", row);
                     // println!("{:X}:{:08b}", row, row);
                     for w in 0..8{
-                        // println!("VX: {:?} VY:{:?}", self.v[x as usize], self.v[y as usize]);
-                        let pixel = (row >> w) & 0b1;
                         let index = (self.v[y as usize] as u16 + h as u16) * 64 + (self.v[x as usize] as u16 + w as u16);
-                        let display_pixel = self.display[index as usize];
-                        let result_pixel = pixel ^ display_pixel;
-
-                        if self.v[0xF] == 0 && pixel == 1 && result_pixel == 0{
-                            self.v[0xF] = 1;
+                        if row & (0x80 >> w) != 0{
+                            if self.display[index as usize] == 1{
+                                self.v[0xF] = 1;
+                            }
+                            self.display[index as usize] ^= 1;
                         }
-
-                        // println!("H: {} W: {} Index: {}", h, w, index);
-                        // println!("Sprite  Pixel: {:08b}", pixel);
-                        // println!("Display Pixel: {:08b}", display_pixel);
-                        // println!("Result  Pixel: {:08b}", result_pixel);
-                        // println!();
-
-                        self.display[index as usize] = result_pixel;
                     }
                 }
+
                 // println!("Display after DRW:");
                 // for i in 0..32{
                 //     for j in 0..64{
@@ -356,15 +342,13 @@ impl Chip8 {
             },
             0xE09E..=0xEF9E => {
                 // [SKP Vx] Skip next instruction if key with the value of Vx is pressed.
-                let input = 0u8; // TODO: Fetch keydown
-                if input == self.v[x as usize] {
+                if  self.key[self.v[x as usize] as usize] != 0{
                     self.pc += 2
                 }
             }
             0xE0A1..=0xEFA1 => {
                 // [SKNP Vx] Skip next instruction if key with the value of Vx is not pressed.
-                let input = 0u8; // TODO: Fetch keydown
-                if input != self.v[x as usize] {
+                if self.key[self.v[x as usize] as usize] == 0{
                     self.pc += 2
                 }
             }
@@ -374,8 +358,7 @@ impl Chip8 {
             }
             0xF00A..=0xFF0A => {
                 // [LD Vx, K] Wait for a key press, store the value of the key in Vx.
-                let input = 0u8; // TODO: wait for key press
-                self.v[x as usize] = input;
+                self.key[0xF] = 1;
             }
             0xF015..=0xFF15 => {
                 // [LD DT, Vx] Set delay timer = Vx.
@@ -391,7 +374,7 @@ impl Chip8 {
             }
             0xF029..=0xFF29 => {
                 // [LD F, Vx] Set I = location of sprite for digit Vx.
-                self.i = self.v[x as usize] as u16; //sprites are 5-byte long
+                self.i = self.v[x as usize] as u16 * 5; //sprites are 5-byte long
             }
             0xF033..=0xFF33 => {
                 // [LD B, Vx] Store BCD representation of Vx in memory locations I, I+1, and I+2.
@@ -419,6 +402,18 @@ impl Chip8 {
         self.opcode = self.decode_opcode();
         self.execute_opcode();
         self.pc += 2;
+
         //update timers
+        if self.delay_timer > 0{
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer > 0{
+            if self.sound_timer == 1{
+                println!("BEEP!");
+            }
+
+            self.sound_timer -= 1;
+        }
     }
 }
